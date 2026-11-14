@@ -25,7 +25,7 @@ servi à choisir un sujet. Il est publié parce que l'inventaire qu'il contient 
 | [Réplique — en direct](replique.html) | L'invité QNX 8.0 de la démo Déclic : la trace noyau figée au crash, décodée par l'oracle `traceprinter`. |
 | [Tamis — en direct](tamis-demo.html) | Le cœur C de Tamis compilé par `qcc`, tournant dans l'invité QNX 8.0 sur une politique `secpol` réelle. |
 | [Glane — en direct](glane-demo.html) | L'invité publie ses capteurs dans `/dev/shmem` et expose `/dev/sensors`, gestionnaire de ressources QNX. |
-| [Veille — en direct](veille-demo.html) | Le cœur C de Veille dans QNX : 4 800 états explorés, 600 échantillons rejoués, `/dev/veille` en service. |
+| [Veille — en direct](veille-demo.html) | Le cœur C de Veille dans QNX, **8 phases** : 4 800 états explorés, ECG réel (MIT-BIH 222) décodé **dans l'invité**, `/dev/veille`, E2/E3/E4, rapport d'audit empreinté. |
 
 ## Les cinq sujets poussés jusqu'au cahier des charges
 
@@ -86,7 +86,7 @@ reste sur l'hôte Linux.
 | [Tamis](tamis-demo.html) | [r630:8092](https://r630-debian.tail3a8bdf.ts.net:8092/) | Le cœur C, compilé par `qcc`, rend ses verdicts **dans QNX** : `TAMIS_PATH_FOUND`, correctif minimal, trou de lint. |
 | [Glane](glane-demo.html) | [r630:8091/glane](https://r630-debian.tail3a8bdf.ts.net:8091/glane) | `glaned` publie les capteurs dans `/dev/shmem` et `/dev/sensors`, en boucle, dans l'invité. |
 | [Toile](toile-demo.html) | [r630:8091/toile](https://r630-debian.tail3a8bdf.ts.net:8091/toile) | Le pilote `toile-gpu` scanoute en 1280×800 et présente des images à 30 im/s (`present_ko=0`). |
-| [Veille](veille-demo.html) | [r630:8091/veille](https://r630-debian.tail3a8bdf.ts.net:8091/veille) | 4 800 états explorés, 600 échantillons rejoués, `/dev/veille` en service (SCHED_FIFO 62), alarme à la déconnexion. |
+| [Veille](veille-demo.html) | [r630:8091/veille](https://r630-debian.tail3a8bdf.ts.net:8091/veille) | 8 phases jouées dans l'invité : 4 800 états explorés, 600 échantillons rejoués, **ECG réel décodé sur cible** (3600 échantillons, 0 fausse alarme), `/dev/veille` (SCHED_FIFO 62), héritage de priorité sous charge, tick noyau, alarme à la déconnexion, rapport d'audit empreinté SHA-256. |
 
 L'écran de gauche est la console VGA de l'invité — les boutons injectent des touches ; la
 console de droite est le port série. **Chaque invite s'arrête après 5 minutes sans visite**

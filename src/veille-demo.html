@@ -39,31 +39,41 @@ moniteur QEMU. Essayez : <code>ls /proc/boot</code>, <code>pidin</code>,
 
 <h3>Ce qui s'exécute dans l'invité</h3>
 <p>L'écran VGA de l'invité fait <strong>80×25</strong> : une démo qui défile n'est pas une démo
-visible. Le scénario est donc joué en <strong>quatre phases</strong>, chacune tenant dans
-l'écran et effaçant la précédente — six secondes par phase, trois cycles, puis
+visible. Le scénario est donc joué en <strong>huit phases</strong>, chacune tenant dans
+l'écran et effaçant la précédente — six secondes par phase, deux cycles, puis
 l'<strong>invite reste interactive</strong> (les boutons de la page injectent leurs touches
 dans l'invité QNX 8.0).</p>
 <table>
 <thead><tr><th>Phase</th><th>Ce que l'écran affiche</th></tr></thead>
 <tbody>
-<tr><td><strong>1/4 — preuve</strong></td><td>exploration exhaustive : <code>VEILLE_PROOF_COMPLETE bound=200 states=4800</code></td></tr>
-<tr><td><strong>2/4 — simulation</strong></td><td>600 échantillons, pannes injectées : 291 alarmes physiologiques, 8 techniques, marge 200 ms, <code>L_measured &lt;= B_proof</code></td></tr>
-<tr><td><strong>3/4 — signal brut</strong></td><td>les quatre états capteur : figé / tachycardie / mort / régulier, avec latence et borne</td></tr>
-<tr><td><strong>4/4 — cible</strong></td><td>le gestionnaire de ressources <code>/dev/veille</code> (QNX, SCHED_FIFO 62), 200 allers-retours mesurés, verdict</td></tr>
+<tr><td><strong>1/8 — preuve</strong></td><td>exploration exhaustive : <code>VEILLE_PROOF_COMPLETE bound=200 states=4800</code></td></tr>
+<tr><td><strong>2/8 — simulation</strong></td><td>600 échantillons, pannes injectées : 291 alarmes physiologiques, 8 techniques, marge 200 ms, <code>L_measured &lt;= B_proof</code></td></tr>
+<tr><td><strong>3/8 — signal brut</strong></td><td>les quatre états capteur : figé / tachycardie / mort / régulier, avec latence et borne</td></tr>
+<tr><td><strong>4/8 — cible</strong></td><td>le gestionnaire de ressources <code>/dev/veille</code> (QNX, SCHED_FIFO 62), 200 allers-retours mesurés, verdict</td></tr>
+<tr><td><strong>5/8 — signal réel</strong></td><td>ECG <strong>d'un patient réel</strong> (MIT-BIH 222, fibrillation atriale) : les octets du fichier sont embarqués dans l'image et le format WFDB 212 est décodé <strong>dans l'invité</strong>, en C — sans Python, sans disque, sans réseau</td></tr>
+<tr><td><strong>6/8 — charge (E2)</strong></td><td>héritage de priorité du noyau : le serveur est à 10, une charge CPU à 30, un client à 40 → <code>prio_effective=40</code></td></tr>
+<tr><td><strong>7/8 — cadence (E3)</strong></td><td>le tick d'acquisition vient du <strong>noyau</strong> (<code>timer_create</code> + pulses, pas <code>sleep()</code>) ; une sonde indépendante compte les pulses sur son propre canal</td></tr>
+<tr><td><strong>8/8 — capteur muet (E4)</strong></td><td>watchdog : le silence du capteur devient une alarme technique bornée (<code>wd_fire_silence_ms=801</code> pour une alarme à 800 ms), puis le rapport d'audit est produit <strong>sur la cible</strong> avec l'empreinte SHA-256 de la configuration</td></tr>
 </tbody>
 </table>
-<p>Sortie réelle relevée dans l'invité (console série, même texte que l'écran) :</p>
-<pre class="cmd">--- bilan ---
-alarmes physiologiques : 291 (latence max 0.063 ms, borne prouve 200 ms)
-alarmes techniques     : 8 (latence max 0.030 ms, borne 50 ms)
-marge de sret        : 200 ms (borne prouve - latence mesure max)
-[OK] L_measured <= B_proof sur tous les chantillons  double preuve cohrente.
-
-PHASE 4/4  CIBLE  -  resource manager /dev/veille + mesure
-# fin label=vitrine echantillons=200 min_us=124 max_us=552 moyenne_us=257
-Verdict de la chaine apres la deconnexion du client :
-INFO VEILLE_OK borne=200 ms
-WARN VEILLE_TECHNICAL_ALARM borne=50 ms</pre>
+<p>Sortie réelle relevée dans l'invité (console série, même texte que l'écran),
+phase 5 — le rejeu du signal réel décodé sur la cible :</p>
+<pre class="cmd">PHASE 5/8  SIGNAL REEL  -  mitdb/222 (fibrillation atriale)
+enregistrement : mitdb/222 (MLII, 10 s, 360 Hz), canal 0, 360 Hz
+echantillons decodes (format 212 sur cible) : 3600
+frequences rapportees : 3238 (min 65 / moyen 77 / max 87 bpm)
+etat capteur deduit du SIGNAL BRUT : sensor_ok
+alarmes techniques : 0 (borne 50 ms)
+latence mesuree sur cible : max 0.089 ms / moyenne 0.010 ms (3600 ech.)
+[OK] rythme irregulier vivant : 0 fausse alarme technique.</pre>
+<p>Ce chiffre de <strong>0 alarme technique</strong> est le point : un rythme irrégulier mais
+vivant ne doit pas être pris pour un capteur figé. C'est un défaut que les
+données réelles ont fait tomber — le critère précédent classait 17,9 % à
+31,8 % des lectures des enregistrements MIT-BIH en « capteur qui dérive »,
+alors que c'était la <strong>respiration du patient</strong>. Le correctif (une rampe de la
+ligne de base confirmée sur cinq fenêtres, ~10 s) assume un <em>temps
+d'installation</em> : une dérive n'est plus bornée par <code>B_tech</code>, parce que c'est une
+défaillance lente.</p>
 
 <h3>Ce qui est vérifié, ce qui ne l'est pas</h3>
 <table>
@@ -73,7 +83,9 @@ WARN VEILLE_TECHNICAL_ALARM borne=50 ms</pre>
 <tr><td>L'exploration exhaustive tourne <em>dans</em> l'invité</td><td><strong>réussi</strong> — 4 800 états, borne 200 ms, verdict identique à l'hôte</td></tr>
 <tr><td>Le gestionnaire de ressources <code>/dev/veille</code> sert un vrai client</td><td><strong>réussi</strong> — 200 allers-retours mesurés, verdict et alarme technique produits dans la cible</td></tr>
 <tr><td>L'écran VGA répond aux touches injectées depuis cette page</td><td><strong>réussi</strong> — <code>ls</code> tapé depuis la page liste <code>/proc/boot</code></td></tr>
-<tr><td>Rapport d'enquête noyau (E2 par trace kernel)</td><td><strong>non établi</strong> — le <code>traceprinter</code> du SDP installé refuse la trace de l'image ; remplacé par la mesure A/B comportementale</td></tr>
+<tr><td>E2 — héritage de priorité <em>par kernel trace</em></td><td><strong>non établi</strong> — le <code>traceprinter</code> du SDP installé refuse la trace de l'image ; <strong>observé comportementalement</strong> à la phase 6 (<code>prio_effective=40</code> pour un serveur à 10)</td></tr>
+<tr><td>E3 — cadence du tick <em>en valeur</em></td><td><strong>non représentatif</strong> — l'invité tourne sous QEMU <sans KVM, et deux boot de la même image donnent <code>maxdev_us=51</code> puis <code>27832</code> : la variance vient de l'émulation et de la charge de l'hôte, pas du noyau. Ce que la phase 7 établit, c'est la <strong>mécanique</strong> (timer noyau + pulses, pas <code>sleep()</code>), pas un chiffre.</td></tr>
+<tr><td>E4 — silence du capteur → alarme technique bornée</td><td><strong>démontré</strong> — phase 8 : <code>wd_fire_silence_ms=801</code> pour une alarme réglée à 800 ms, et l'alarme se lève d'elle-même au retour du signal</td></tr>
 <tr><td>Comportement sur matériel réel, plusieurs patients</td><td><strong>non démontré</strong> — émulateur ≠ matériel, et les jeux de données sont trois patients différents</td></tr>
 </tbody>
 </table>
@@ -84,7 +96,7 @@ n'embarque aucun <code>printf</code> — le scénario embarqué n'utilise donc q
 (l'image socle n'a pas de pilote d'affichage).</blockquote>
 
 <h3>L'invite reste interactive après la démo</h3>
-<p>Quand le scénario a fini ses trois cycles, l'invité ne s'éteint pas : il rend la main
+<p>Quand le scénario a fini ses deux cycles, l'invité ne s'éteint pas : il rend la main
 sur un <strong>shell QNX 8.0</strong>. Les boutons de la page injectent leurs touches
 dans la VM — on peut donc interroger la cible depuis le navigateur. Tapé depuis la
 vitrine :</p>
@@ -101,6 +113,8 @@ une invite vivante, pas une capture d'écran.</p>
 <li><a href="https://github.com/Tradoooo/veille">Le dépôt du projet</a> — cœur C11, jumeau Python, preuve d'exploration, CI</li>
 <li><a href="https://tradoooo.github.io/veille/docs-qnx-evidence.html">docs-qnx-evidence</a> — le compte rendu factuel sur cible et les journaux bruts</li>
 <li><a href="https://github.com/Tradoooo/veille/tree/main/image">image/</a> — construction de l'image invitée (buildfile <code>mkifs</code>, <code>build-image.sh</code>, <code>demo.sh</code>)</li>
+<li><a href="https://github.com/Tradoooo/veille/tree/main/preuve/emulateur/phases">preuve/emulateur/phases/</a> — <strong>une capture par phase</strong>, prise au moment où elle s'affiche (8 images distinctes) + le journal série de la même exécution : ce que décrit cette page se vérifie image par image</li>
+<li><a href="https://github.com/Tradoooo/veille/blob/main/docs/QNX-DEMO.md">docs/QNX-DEMO.md</a> — les huit phases en détail, et la distinction entre le signal réel décodé <em>dans</em> l'invité (10 s) et le rejeu de 30 min piloté <em>depuis</em> l'hôte</li>
 </ul>
 <script>
 var API="https://r630-debian.tail3a8bdf.ts.net:8091/veille";
